@@ -1,3 +1,4 @@
+import { registerBookmarkTools } from "./bookmark-tools";
 import { registerDebugTool } from "./debug-tool";
 import { registerExtractTool } from "./extract-tool";
 import type { PhaseOneRuntime, ToolRegistrar } from "./phase-one-runtime";
@@ -21,4 +22,5 @@ export function registerPhaseOneTools(
   registerDebugTool(deps, register, runtime);
   registerVideoTool(deps, register, runtime);
   registerExtractTool(deps, register, runtime);
+  registerBookmarkTools(deps, register, runtime);
 }

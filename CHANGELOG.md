@@ -53,6 +53,12 @@ Starting from 0.2.0, CLI / Extension / DSH Plugin share the same version number.
   DSH `bsk_page` tool, with explicit deadlines and recovery guidance.
 - CLI browser-selector errors list connected browsers when no instance matches.
 
+### Added
+
+- Optional local-profile bookmark access: read the native tree, move nodes,
+  create folders, and remove empty folders through CLI and DSH tools. Access
+  is off by default and can be granted or revoked in the extension settings.
+
 ### Fixed
 
 - DSH Plugin: roll back incomplete tool registration, surface activation failures,
