@@ -234,3 +234,44 @@ it("L13: rejected staged verification preserves an active pairing and never send
   expect((await credentials.readLocalState()).credentials).toEqual([record]);
   expect(socket.sent.some((frame) => frame.method === "system.handshake")).toBe(false);
 });
+
+it.each([
+  false,
+  true,
+])("a concurrent activation still requires a fresh server proof (bad=%s)", async (bad) => {
+  const first = new Socket();
+  const next = new Socket();
+  let active: LocalCredential;
+  first.handler = async (request) => {
+    // The main socket commits after the verifier captured generation zero.
+    let record = (await credentials.readLocalState()).credentials[0];
+    record = await credentials.saveCandidate(record, { txn: v.txn, gen: 1, key: v.candidate });
+    active = await credentials.promoteCandidate(record, { txn: v.txn, gen: 1 });
+    server(next, active, bad ? "bad" : "normal");
+    first.receive({
+      id: request.id,
+      result: {
+        local_auth: {
+          type: "pairing_required",
+          daemon_id: v.daemon_id,
+          legacy_accepted: false,
+        },
+      },
+    });
+  };
+  const sockets = [first, next];
+  const result = verifyLocalPairing(link, instanceId, origin, () => {
+    const socket = sockets.shift()!;
+    queueMicrotask(() => socket.dispatchEvent(new Event("open")));
+    return socket.ws();
+  });
+  if (bad) await expect(result).rejects.toThrow("server_unverified");
+  else expect(await result).toMatchObject({ state: "verified" });
+  expect(sockets).toHaveLength(0);
+  expect((await credentials.readLocalState()).credentials).toEqual([active!]);
+  expect(next.sent[0].params).toMatchObject({ local_auth: { credentials: [{ gen: 1 }] } });
+  if (bad) expect(next.sent).toHaveLength(1);
+  expect([...first.sent, ...next.sent].some((frame) => frame.method === "system.handshake")).toBe(
+    false,
+  );
+});

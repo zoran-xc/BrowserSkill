@@ -24,35 +24,57 @@ export async function verifyLocalPairing(
   try {
     credential = await stageCredential(credential);
     staged = true;
-    if (abort.signal.aborted) throw new LocalAuthError({ state: "server_unverified" });
-    socket = factory(credential.endpoint);
-    const connection = socket;
-    await new Promise<void>((resolve, reject) => {
-      const dispose = () => {
-        connection.removeEventListener("open", opened);
-        connection.removeEventListener("close", failed);
-        abort.signal.removeEventListener("abort", failed);
-      };
-      const opened = () => {
-        dispose();
-        resolve();
-      };
-      const failed = () => {
-        dispose();
-        reject(new LocalAuthError({ state: "server_unverified" }));
-      };
-      connection.addEventListener("open", opened);
-      connection.addEventListener("close", failed);
-      abort.signal.addEventListener("abort", failed, { once: true });
-    });
-    const status = await authenticateLocal(
-      connection,
-      abort.signal,
-      [credential],
-      instanceId,
-      origin,
-    );
-    return { ...status, endpoint: credential.endpoint };
+    for (let attempt = 0; ; attempt++) {
+      if (abort.signal.aborted) throw new LocalAuthError({ state: "server_unverified" });
+      socket = factory(credential.endpoint);
+      const connection = socket;
+      await new Promise<void>((resolve, reject) => {
+        const dispose = () => {
+          connection.removeEventListener("open", opened);
+          connection.removeEventListener("close", failed);
+          abort.signal.removeEventListener("abort", failed);
+        };
+        const opened = () => {
+          dispose();
+          resolve();
+        };
+        const failed = () => {
+          dispose();
+          reject(new LocalAuthError({ state: "server_unverified" }));
+        };
+        connection.addEventListener("open", opened);
+        connection.addEventListener("close", failed);
+        abort.signal.addEventListener("abort", failed, { once: true });
+      });
+      try {
+        const status = await authenticateLocal(
+          connection,
+          abort.signal,
+          [credential],
+          instanceId,
+          origin,
+        );
+        return { ...status, endpoint: credential.endpoint };
+      } catch (error) {
+        const latest = (await readLocalState()).credentials.find(
+          (c) => c.deviceId === credential.deviceId && c.daemonId === credential.daemonId,
+        );
+        // The main connection may activate or recover this same staged record
+        // while the verifier opens. Verify its advanced key on a fresh socket;
+        // a concurrent commit is never accepted without another server proof.
+        if (
+          attempt === 0 &&
+          latest &&
+          (latest.gen > credential.gen ||
+            (latest.pending && latest.pending.txn !== credential.pending?.txn))
+        ) {
+          credential = latest;
+          socket.close();
+          continue;
+        }
+        throw error;
+      }
+    }
   } catch (error) {
     // Once confirmation may have reached the daemon, retain the candidate for
     // recovery. Deleting it on a lost commit reply would strand a replacement.
