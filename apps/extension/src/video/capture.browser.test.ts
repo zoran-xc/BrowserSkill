@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { attachVideoBackground, type BrowserSend as Send } from "./browser-fixture";
 import { createDshVideoFixture } from "./dsh-fixture";
+import { buildPairingFixture } from "./pairing-fixture";
 
 const run = promisify(execFile);
 
@@ -169,6 +170,7 @@ describe.skipIf(!process.env.BSK_VIDEO_CHROME || !process.env.BSK_VIDEO_BSK)(
             import.meta.url,
           ).href
         );
+        const pairingSource = await buildPairingFixture(directory, manifest.version);
         const attachedPages: { parent: string; session: string; prerender: boolean }[] = [];
         await withChrome(
           {
@@ -195,17 +197,6 @@ describe.skipIf(!process.env.BSK_VIDEO_CHROME || !process.env.BSK_VIDEO_BSK)(
             },
           },
           async (send: Send) => {
-            await expect
-              .poll(async () => (await cli("browsers")).length, { timeout: 15_000 })
-              .toBe(1);
-            const task = await cli("session", "start");
-            const session = task.session_id;
-            await cli("navigate", "--session", session, `http://127.0.0.1:${address.port}/red`);
-            const started = await cli("video", "start", "--session", session, "--duration", "30s");
-            const id = started.recording.recording_id;
-            expect(started.recording.state).toBe("recording");
-            await new Promise((resolve) => setTimeout(resolve, 1100));
-            await cli("navigate", "--session", session, `http://127.0.0.1:${address.port}/blue`);
             const workerSession = await attachVideoBackground(send, manifest.name);
             const origin = workerSession.origin;
             const evaluate = async <T>(sessionId: string, expression: string): Promise<T> => {
@@ -217,6 +208,28 @@ describe.skipIf(!process.env.BSK_VIDEO_CHROME || !process.env.BSK_VIDEO_BSK)(
               if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
               return result.result.value;
             };
+            const { stdout: pairingOutput } = await run(executable, ["daemon", "pair"], {
+              env,
+              timeout: 10_000,
+            });
+            // Run the production verifier in the isolated extension origin; the
+            // normal transport then reconnects using its committed credential.
+            const paired = await evaluate<{ state: string }>(
+              workerSession.sessionId,
+              `${pairingSource};PairingFixture.pair(${JSON.stringify(pairingOutput.trim())})`,
+            );
+            expect(paired.state).toBe("verified");
+            await expect
+              .poll(async () => (await cli("browsers")).length, { timeout: 45_000 })
+              .toBe(1);
+            const task = await cli("session", "start");
+            const session = task.session_id;
+            await cli("navigate", "--session", session, `http://127.0.0.1:${address.port}/red`);
+            const started = await cli("video", "start", "--session", session, "--duration", "30s");
+            const id = started.recording.recording_id;
+            expect(started.recording.state).toBe("recording");
+            await new Promise((resolve) => setTimeout(resolve, 1100));
+            await cli("navigate", "--session", session, `http://127.0.0.1:${address.port}/blue`);
             await expect
               .poll(
                 () =>
