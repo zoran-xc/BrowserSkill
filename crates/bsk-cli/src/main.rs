@@ -91,6 +91,7 @@ fn dispatch(cli: Cli, format: Format) -> Result<(), CliError> {
         Command::Click(args) => cli::interaction::dispatch_click(args, format),
         Command::Hover(args) => cli::interaction::dispatch_hover(args, format),
         Command::Bookmarks(args) => cli::bookmarks::dispatch(args, format),
+        Command::Extensions(args) => cli::extensions::dispatch(args, format),
         Command::Wheel(args) => cli::wheel::dispatch(args, format),
         Command::ScrollTo(args) => cli::scroll::dispatch(args, format),
         Command::Focus(args) => cli::interaction::dispatch_focus(args, format),

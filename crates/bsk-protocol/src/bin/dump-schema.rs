@@ -28,6 +28,7 @@ macro_rules! dump {
 }
 
 fn main() {
+    dump!(ExtensionsParams, "tool_extensions_params");
     dump!(BookmarksParams, "tool_bookmarks_params");
     dump!(BookmarksResult, "tool_bookmarks_result");
     dump!(VideoParams, "tool_video_params");

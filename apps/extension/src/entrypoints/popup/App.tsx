@@ -277,6 +277,7 @@ export function App() {
 
           <InteractionSettings />
           <BookmarkSettings />
+          <BookmarkSettings management />
 
           <CurrentTasks enabled={connectionLive} />
 

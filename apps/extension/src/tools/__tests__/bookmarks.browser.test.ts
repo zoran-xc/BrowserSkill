@@ -2,7 +2,7 @@
 // The browser, daemon, and bookmarks belong to temporary directories.
 import { execFile, spawn } from "node:child_process";
 import { type EventEmitter, once } from "node:events";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -28,7 +28,13 @@ describe.skipIf(!process.env.BSK_BOOKMARKS_CHROME || !process.env.BSK_BOOKMARKS_
         stdio: "ignore",
       });
       const cli = async (...args: string[]) =>
-        JSON.parse((await run(executable, ["--json", ...args], { env, timeout: 40_000 })).stdout);
+        JSON.parse(
+          (
+            await run(executable, ["--json", ...args], { env, timeout: 40_000 }).catch((error) => {
+              throw new Error(`${error.message}\nstdout: ${error.stdout}\nstderr: ${error.stderr}`);
+            })
+          ).stdout,
+        );
       try {
         let port = 0;
         await expect
@@ -52,9 +58,9 @@ describe.skipIf(!process.env.BSK_BOOKMARKS_CHROME || !process.env.BSK_BOOKMARKS_
         expect(manifest.permissions).not.toContain("bookmarks");
         // Grant only this isolated test extension native API access at installation.
         manifest.name = "BrowserSkill bookmark regression";
-        manifest.permissions.push("bookmarks");
+        manifest.permissions.push("bookmarks", "management");
         manifest.optional_permissions = manifest.optional_permissions.filter(
-          (value: string) => value !== "bookmarks",
+          (value: string) => value !== "bookmarks" && value !== "management",
         );
         await writeFile(manifestPath, JSON.stringify(manifest));
         const backgroundPath = path.join(extension, "background.js");
@@ -63,6 +69,12 @@ describe.skipIf(!process.env.BSK_BOOKMARKS_CHROME || !process.env.BSK_BOOKMARKS_
         await writeFile(
           backgroundPath,
           background.replaceAll("ws://127.0.0.1:52800", `ws://127.0.0.1:${port}`),
+        );
+        const dummy = path.join(directory, "dummy");
+        await mkdir(dummy);
+        await writeFile(
+          path.join(dummy, "manifest.json"),
+          JSON.stringify({ manifest_version: 3, name: "R2 disposable extension", version: "1.0" }),
         );
         const { withChrome } = await import(
           new URL(
@@ -73,7 +85,7 @@ describe.skipIf(!process.env.BSK_BOOKMARKS_CHROME || !process.env.BSK_BOOKMARKS_
         await withChrome(
           {
             executable: process.env.BSK_BOOKMARKS_CHROME,
-            extensionPath: extension,
+            extensionPath: `${extension},${dummy}`,
             deviceScale: 1,
             zoom: 1,
           },
@@ -85,6 +97,33 @@ describe.skipIf(!process.env.BSK_BOOKMARKS_CHROME || !process.env.BSK_BOOKMARKS_
             const bookmarks = (...args: string[]) =>
               cli("bookmarks", "--session", task.session_id, ...args);
             try {
+              const ext = (...args: string[]) =>
+                cli("extensions", "--session", task.session_id, ...args);
+              const installed = await ext("list");
+              const disposable = installed.extensions.find(
+                (item: { name: string }) => item.name === "R2 disposable extension",
+              );
+              expect(disposable).toBeDefined();
+              expect(await ext("disable", disposable.id)).toMatchObject({
+                id: disposable.id,
+                enabled: false,
+              });
+              expect(await ext("enable", disposable.id)).toMatchObject({
+                id: disposable.id,
+                enabled: true,
+              });
+              // Native uninstall requires a user gesture; no CLI uninstall is shipped.
+              await expect(ext("uninstall", disposable.id)).rejects.toThrow();
+              if (process.env.YONDER_PLUGIN_ENTRY) {
+                const browser = (await cli("browsers"))[0];
+                const result = await run(
+                  process.execPath,
+                  [process.env.YONDER_PLUGIN_ENTRY, browser.instance_id ?? browser.id],
+                  { env, timeout: 60_000 },
+                );
+                expect(result.stdout).toContain("YONDER_PLUGIN_BOOKMARKS_OK");
+                console.log(result.stdout.trim());
+              }
               const tree = await bookmarks("tree");
               const bar = tree.nodes[0].children.find(
                 (node: { title: string; folderType?: string }) =>

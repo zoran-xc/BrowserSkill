@@ -65,6 +65,7 @@ fn emit_build_revision() {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=BSK_FORK_BUILD");
     emit_build_revision();
     println!("cargo:rerun-if-changed=build.rs");
     let manifest = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");

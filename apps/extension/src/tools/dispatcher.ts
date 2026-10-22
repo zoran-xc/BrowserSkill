@@ -60,6 +60,7 @@ import { handleDownload } from "./download";
 import { type EmulateCdpRunner, handleEmulate } from "./emulate";
 import { classifyCdpError } from "./errors";
 import { handleEvaluate } from "./evaluate";
+import { handleExtensions } from "./extensions";
 import { handleExtract } from "./extract";
 import { handleRequestHelp } from "./human-loop";
 import {
@@ -438,6 +439,15 @@ export class ToolDispatcher {
     );
     if (preparationError) return preparationError;
     switch (req.method) {
+      case "tool.extensions_list":
+      case "tool.extensions_enable":
+      case "tool.extensions_disable":
+        return handleExtensions(
+          this.sessions,
+          req.method,
+          req.params as { session_id: string; id?: string },
+          signal,
+        );
       case "tool.bookmarks_tree":
       case "tool.bookmarks_move":
       case "tool.bookmarks_create_folder":
@@ -492,9 +502,6 @@ export class ToolDispatcher {
       }
       case "tool.tab_list":
         return handleTabList(this.sessions, req.params as TabListParams, chromeTabsApi, signal);
-      case "tool.bookmarks_move":
-      case "tool.bookmarks_create_folder":
-      case "tool.bookmarks_remove_empty_folder":
       case "tool.tab_create": {
         const result = await handleTabCreate(this.sessions, req.params as TabCreateParams, {
           signal,

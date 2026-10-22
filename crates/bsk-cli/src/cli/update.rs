@@ -234,6 +234,9 @@ pub fn dispatch(args: UpdateArgs, format: Format) -> Result<(), CliError> {
 }
 
 fn run(args: UpdateArgs, format: Format) -> Result<()> {
+    if option_env!("BSK_FORK_BUILD") == Some("1") {
+        bail!("This fork build disables upstream updates; rebuild from its pinned fork branch");
+    }
     let client = update_http_client(ARCHIVE_FETCH_TIMEOUT)?;
     let manifest = fetch_manifest_with_client(&client, &manifest_url())?;
     let platform = current_platform_key()?;
@@ -679,7 +682,8 @@ fn manifest_url() -> String {
 /// switch is interpreted — the daemon periodic task and the CLI hint
 /// both go through it so they always agree.
 pub(crate) fn auto_update_enabled() -> bool {
-    auto_update_enabled_from(std::env::var(AUTO_UPDATE_ENV).ok().as_deref())
+    option_env!("BSK_FORK_BUILD") != Some("1")
+        && auto_update_enabled_from(std::env::var(AUTO_UPDATE_ENV).ok().as_deref())
 }
 
 fn auto_update_enabled_from(value: Option<&str>) -> bool {

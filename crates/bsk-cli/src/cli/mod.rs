@@ -17,6 +17,7 @@ pub mod emulate;
 pub mod ensure_daemon;
 pub mod error;
 pub mod evaluate;
+pub mod extensions;
 pub mod extract;
 pub mod get_html;
 pub mod human_loop;
@@ -189,6 +190,8 @@ pub enum Command {
 
     /// Read or edit bookmarks in the selected local browser profile.
     Bookmarks(bookmarks::BookmarksArgs),
+    /// Manage installed extensions in the selected local profile (owner opt-in).
+    Extensions(extensions::ExtensionsArgs),
 
     /// Hover a snapshot ref or CSS selector.
     Hover(HoverArgs),

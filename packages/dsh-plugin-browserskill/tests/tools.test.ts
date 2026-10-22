@@ -273,7 +273,14 @@ const EXPECTED_ACTIONS = {
     "press",
   ],
   bsk_tabs: ["list", "create", "select", "close", "borrow", "return"],
-  bsk_assist: ["bookmarks-move", "bookmarks-create-folder", "bookmarks-remove-empty-folder", "resize", "emulate", "request-help"],
+  bsk_assist: [
+    "bookmarks-move",
+    "bookmarks-create-folder",
+    "bookmarks-remove-empty-folder",
+    "resize",
+    "emulate",
+    "request-help",
+  ],
 } as const;
 
 describe("bookmark tools", () => {
